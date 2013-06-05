@@ -1,3 +1,4 @@
+# Usage: python bot.py accountPassword [turnNo]
 ################################################################################
 ## Imports
 ################################################################################
@@ -24,8 +25,8 @@ dc = windll.user32.GetDC( 0 )
 ## Reporting
 ################################################################################
 
-GMAIL_PASSWORD = 'Ru$h2112'
-GMAIL_USERNAME = 'overture2112'
+GMAIL_PASSWORD = 'potpiebot'
+GMAIL_USERNAME = 'overturebot'
 GMAIL_SUBJECT = 'MMDoC Bot'
 
 def sendmail( body ): # :: Str -> IO ()
@@ -364,9 +365,9 @@ class Bot( threading.Thread ):
 
         needStart = True
         turn = 0
-        if len( sys.argv ) > 1:
+        if len( sys.argv ) > 2:
             needStart = False
-            turn = int( sys.argv[1] )
+            turn = int( sys.argv[2] )
 
         if needStart:
             restart()
@@ -400,7 +401,7 @@ def restart():
     click( *LOC_LOGIN_PASSWORD ); sleep( 1 ) #NOTE: probably not needed. verify this
         # type password
     shell = win32com.client.Dispatch("WScript.Shell")
-    shell.SendKeys('cfavader17')
+    shell.SendKeys( sys.argv[1] )
         # click login
     click( *LOC_LOGIN_BTN ); sleep( 1 )
         # wait for slow load
