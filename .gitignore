@@ -1,3 +1,6 @@
+# Password files
+*.secret
+
 #################
 ## Eclipse
 #################
