@@ -246,7 +246,7 @@ def attackWithAllCreatures():
             click( *dest )
 
 def mainloop( turn=0 ):
-    timing, t0 = {}, time()
+    timing, t0 = { 'me':{}, 'enemy':{} }, time()
 
     # Get in game
     if turn == 0:
@@ -259,17 +259,22 @@ def mainloop( turn=0 ):
     # Play game
     acceptHand()
     while 1:
+        # Sanity check
         if ( time()-t0 ) > 60*25 or turn > 20: raise RuntimeError( 'Game has gone on exceptionally long. Probably in bad state' )
+
         # Wait for turn
+        t_started_waiting = time()
         state = waitUntilTurnOrGameOver()
         if state == 'game over': break
-        t = time()
+            # minor bookeeping
+        t_started_our_turn = time()
+        timing['enemy'][ turn ] = t_started_our_turn - t_started_waiting
 
         # Play turn
 
             # Use hero
         delay( 1 )
-        if turn <  3:   useHero( 1 ) # 4/2/2 then draw
+        if turn <  3:   useHero( 1 ) # 4/2/2. +3 might > +1 magic > draw
         if turn == 3:   useHero( 2 )
         if turn >  3:   useHero( 4 )
         useHero( 1 )    # just in case others failed or we miscounted
@@ -279,7 +284,7 @@ def mainloop( turn=0 ):
         endTurn()
 
         # book keeping
-        timing[ turn ] = time() - t
+        timing['me'][ turn ] = time() - t_started_our_turn
         turn += 1
     acceptRewards()
 
@@ -361,4 +366,8 @@ main()
 # Hang history
 * Game ended during attack phase, causing it to miss leave game button and kept thinking it was still it's turn forever
 * It thought game ended when it hadn't, then queued and waited forever
+
+# Issues
+* while trying to activate cards it accidently moves cards on the board sometimes
+* Waits too long for certain things
 '''
