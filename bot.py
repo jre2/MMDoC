@@ -2,17 +2,22 @@
 ## Imports
 ################################################################################
 
-import win32com
-import win32com.client
+# core
 import os
 import sys
-import threading
+# utils
+from   math import sqrt
 import random
-from math import sqrt
-from time import sleep, time
-from ctypes import windll
+import re
+import threading
+from   time import sleep, time
+# ui
+from   ctypes import windll
+import win32com.client
+import win32gui
+# email
 import smtplib
-from email.MIMEText import MIMEText
+from   email.MIMEText import MIMEText
 dc = windll.user32.GetDC( 0 )
 
 ################################################################################
@@ -81,6 +86,59 @@ def followLine( x, y ): # :: Loc -> IO ()
     x,y = _followLine( x, y, rate=10 )
     x,y = _followLine( x, y-11, rate=1 )
     return (x,y)
+
+################################################################################
+## New manipulation tools
+################################################################################
+
+def WindowTitle2Hwnd():
+    d = {}
+    def f( hwnd, *args ):
+        title = win32gui.GetWindowText( hwnd )
+        d[ title ] = hwnd
+    win32gui.EnumWindows( f, None )
+    return d
+
+def GetWindowChildren( phwnd ):
+    def callback( hwnd, hwnds ):
+        if win32gui.IsWindowVisible( hwnd ) and win32gui.IsWindowEnabled( hwnd ):
+            hwnds[ win32gui.GetClassName( hwnd ) ] = hwnd
+        return True
+
+    hwnds = {}
+    win32gui.EnumChildWindows( phwnd, callback, hwnds)
+    return hwnds
+
+def FindWindowRE( pat ):
+    d = {}
+    def f( hwnd, pat ):
+        title = win32gui.GetWindowText( hwnd )
+        if re.match( pat, title ):
+            d[ title ] = ( hwnd, GetWindowChildren( hwnd ) )
+    win32gui.EnumWindows( f, pat )
+    return d
+
+def clickWindow( hwnd, x, y, screen2client=True ):
+    if screen2client:
+        x, y = win32gui.ScreenToClient( hwnd, (x, y) )
+    lparam = y << 16 | x
+
+    win32gui.SendMessage( hwnd, win32con.WM_MOUSEMOVE, 0, lparam )
+    win32gui.SendMessage( hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam )
+    win32gui.SendMessage( hwnd, win32con.WM_LBUTTONUP, win32con.MK_LBUTTON, lparam )
+
+def click__( x, y ):
+    r = FindWindowRE( '.*Paint.*' )
+    hwnd = r.values()[0][1]['Afx:00000000FF830000:8']
+    clickWindow( hwnd, x, y )
+
+def example():
+    r = FindWindowRE( '.*Paint.*' )
+    print r
+    hwnd = r.values()[0][1]['Afx:00000000FF830000:8']
+    print hwnd
+    clickWindow( hwnd, 400, 500 )
+    lclick( 400, 500 )
 
 ################################################################################
 ## Bot Logic Utils
