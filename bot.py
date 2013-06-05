@@ -420,17 +420,3 @@ def main():
         sleep(1)
 
 main()
-
-'''Dev notes:
-# Hang history
-* Game ended during attack phase, causing it to miss leave game button and kept thinking it was still it's turn forever
-* It thought game ended when it hadn't, then queued and waited forever
-
-# Issues
-* while trying to activate cards it accidently moves cards on the board sometimes
-* Waits too long for certain things
-
-# AI
-* when few creatures on board, it'd be handy to toss out many small rather than 1 big
-* sometimes wastes resources on spells that would be better spent getting creatures out
-'''
