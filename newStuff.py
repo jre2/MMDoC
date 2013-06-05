@@ -1,13 +1,8 @@
-GMAIL_PASSWORD = 'Ru$h2112'
-GMAIL_USERNAME = 'overture2112'
-GMAIL_SUBJECT = 'MMDoC Bot'
-
 ################################################################################
 ## Imports
 ################################################################################
 
-import win32com
-import win32com.client
+import win32.client
 import os
 import sys
 import threading
@@ -22,6 +17,10 @@ dc = windll.user32.GetDC( 0 ) # TODO: replace with exact dc
 ################################################################################
 ## Reporting
 ################################################################################
+
+GMAIL_PASSWORD = 'foo'
+GMAIL_USERNAME = 'overture2112'
+GMAIL_SUBJECT = 'MMDoC Bot'
 
 def sendmail( body ): # :: Str -> IO ()
     addr = GMAIL_USERNAME + '@gmail.com'
@@ -83,8 +82,25 @@ def followLine( x, y ): # :: Loc -> IO ()
     return (x,y)
 
 ################################################################################
-## Logic
+## Bot Logic Utils
 ################################################################################
+
+def dist3( a, b ):
+    return sqrt( ( a[0]-b[0] )**2 + ( a[1]-b[1] )**2 + ( a[2]-b[2] )**2 )
+
+def nearlyColor( loc, color, tolerance ):
+    return dist3( getPixel( *loc ), color ) <= tolerance
+
+def delay( sec ):
+    '''Wait for roughly given amount of time'''
+    t = min( 5, max( sec, random.gauss( sec, sec*0.5 ) ) )
+    sleep( t )
+
+################################################################################
+## Game Specific Logic
+################################################################################
+
+LAST_GAME_END_TIME = time()
 
 COLOR_ACCEPT_HAND = (34, 61, 67)
 COLOR_TURN_END = (198, 84, 16)
@@ -109,17 +125,6 @@ LOC_HERO = ( 504, 479 )
 LOC_HERO_OPTION1 = ( 500, 280 )
 HERO_OPTION_DELTA = 60
 
-def dist3( a, b ):
-    return sqrt( ( a[0]-b[0] )**2 + ( a[1]-b[1] )**2 + ( a[2]-b[2] )**2 )
-
-def nearlyColor( loc, color, tolerance ):
-    return dist3( getPixel( *loc ), color ) <= tolerance
-
-def delay( sec ):
-    '''Wait for roughly given amount of time'''
-    t = min( 5, max( sec, random.gauss( sec, sec*0.5 ) ) )
-    sleep( t )
-
 def queueForGame():
     '''Must be out of game at home screen'''
     print 'Queueing'
@@ -139,8 +144,7 @@ def waitForGame():
     '''Wait for mulligan buttons to appear'''
     t = time()
     while 1:
-        if ( time()-t ) > 60*5:
-            raise RuntimeError( 'queue taking too long, probably in bad state' )
+        if ( time()-t ) > 60*5: raise RuntimeError( 'Spent too long waiting for game. Probably in bad state' )
         if getPixel( *LOC_ACCEPT_HAND ) == COLOR_ACCEPT_HAND:
             return
         delay( 3 )
@@ -155,7 +159,9 @@ def determineWhoseTurn():
 
 def waitUntilTurnOrGameOver():
     print 'Waiting until my turn'
+    t = time()
     while 1:
+        if ( time()-t ) > 60*5: raise RuntimeError( 'Spent too long waiting for it to be our turn. Probably in bad state' )
         if getPixel( *LOC_LEAVE_BUTTON ) == COLOR_LEAVE_BUTTON: return 'game over'
         r = determineWhoseTurn()
         if r == 'enemy turn': sleep( 3 )
@@ -204,7 +210,6 @@ def tryCardsInHand():
         # Creatures
         locs = LOC_BOARD_SPACES_CENTERS[:]
         random.shuffle( locs )
-        #locs.append( (647,281) ) # popup confirmation button
 
         while nearlyColor( LOC_CHOOSE_POSITION_CLOSE, COLOR_CHOOSE_POSITION_CLOSE, 10 ): # can place
             if not locs:
@@ -243,6 +248,7 @@ def mainloop( turn=0 ):
     # Play game
     acceptHand()
     while 1:
+        if ( time()-t0 ) > 60*25 or turn > 20: raise RuntimeError( 'Game has gone on exceptionally long. Probably in bad state' )
         # Wait for turn
         state = waitUntilTurnOrGameOver()
         if state == 'game over': break
@@ -269,7 +275,15 @@ def mainloop( turn=0 ):
     
     # Reporting
     timing['total'] = time() - t0
+    global LAST_GAME_END_TIME
+    LAST_GAME_END_TIME = time()
     sendmail( 'Timing: %s' % timing )
+
+def restart_game_app(): pass # kill proc, open via launcher, login
+    
+################################################################################
+## Bot Driver
+################################################################################
 
 class Bot( threading.Thread ):
     def __init__( self ):
@@ -278,54 +292,26 @@ class Bot( threading.Thread ):
 
     def run( self ):
         print 'Starting bot'
-        import pythoncom
-        pythoncom.CoInitialize()
-
-        # args are either 'gameClosed' -> start up game too; # -> turn number to start at
-        turn = 0
-        if len( sys.argv ) > 1:
-            if sys.argv[1] == 'gameClosed':
-                restart()
-            else:
-                turn = int( sys.argv[1] )
-
+        turn = int( sys.argv[1] ) if len( sys.argv ) > 1 else 0
         while 1:
             try:
                 mainloop( turn )
                 turn = 0
             except RuntimeError:
-                restart()
-
-def restart():
-    sendmail( 'Restarting' )
-    
-    os.system('taskkill /F /IM Game.exe')
-    #os.system('taskkill /F /IM Launcher.exe')
-    sleep( 5 )
-    #os.system(r'C:\Users\Joseph\AppData\Roaming\Ubisoft\MMDoC-PDCLive\Launcher.exe')
-    #sleep( 10 )
-    
-    click( 1254, 771 ); sleep( 1 ) # play btn
-    click( 1254, 771 ); sleep( 1 ) # play btn
-    
-    sleep( 15 ) # wait for login screen
-
-    click( 994, 106 ) # get focus for mmdoc
-    click( 876, 571 ); sleep( 1 ) # password box
-    click( 876, 571 ); sleep( 1 ) # password box
-    shell = win32com.client.Dispatch("WScript.Shell")
-    shell.SendKeys('cfavader17')
-    click( 948, 691 ); sleep( 1 ) # login btn
-    sleep( 20 ) # wait for login
-    #FIXME: verify at home screen, otherwise try again
+                restart_game_app()
+                
+def restart_self():
+    os.execl( sys.executable, *( [sys.executable] + sys.argv ) )
+    os._exit(0)
 
 def main():
+    restart_game_app()
     b = Bot()
     b.start()
     while 1:
+        if ( time()-LAST_GAME_END_TIME ) > 60*40: restart_self()
         if windll.user32.GetAsyncKeyState( 0x76 ): # F7 key is pressed
             print 'KILL SWITCH caught'
             return
         sleep(1)
-
 main()
