@@ -330,4 +330,5 @@ def main():
         sleep(1)
 
 print 'EXTRA PRINT HERE'
+print 'foo'
 main()
