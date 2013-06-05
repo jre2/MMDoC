@@ -27,7 +27,7 @@ dc = windll.user32.GetDC( 0 )
 
 GMAIL_PASSWORD = 'potpiebot'
 GMAIL_USERNAME = 'overturebot'
-GMAIL_SUBJECT = 'MMDoC Bot'
+GMAIL_SUBJECT = 'MMDoC Bot - %s' % os.environ['COMPUTERNAME']
 
 def sendmail( body ): # :: Str -> IO ()
     addr = GMAIL_USERNAME + '@gmail.com'
