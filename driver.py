@@ -41,7 +41,7 @@ def main():
                 p = restart( new, p )
                 cur = new
                 print 'Updated with new code'
-        except e:
+        except Exception, e:
             print 'Updater failed with', e
 
 main()
