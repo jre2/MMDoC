@@ -329,5 +329,5 @@ def main():
             return
         sleep(1)
 
-#print 'EXTRA PRINT HERE'
+print 'EXTRA PRINT HERE'
 main()
