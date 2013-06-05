@@ -281,14 +281,15 @@ class Bot( threading.Thread ):
         import pythoncom
         pythoncom.CoInitialize()
 
-        # args are either 'gameClosed' -> start up game too; # -> turn number to start at
+        needStart = True
         turn = 0
         if len( sys.argv ) > 1:
-            if sys.argv[1] == 'gameClosed':
-                restart()
-            else:
-                turn = int( sys.argv[1] )
+            needStart = False
+            turn = int( sys.argv[1] )
 
+        if needStart:
+            restart()
+            
         while 1:
             try:
                 mainloop( turn )
@@ -328,4 +329,5 @@ def main():
             return
         sleep(1)
 
+#print 'EXTRA PRINT HERE'
 main()
