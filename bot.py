@@ -370,4 +370,8 @@ main()
 # Issues
 * while trying to activate cards it accidently moves cards on the board sometimes
 * Waits too long for certain things
+
+# AI
+* when few creatures on board, it'd be handy to toss out many small rather than 1 big
+* sometimes wastes resources on spells that would be better spent getting creatures out
 '''
