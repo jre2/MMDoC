@@ -65,9 +65,9 @@ def lclickG( x, y ): # :: Loc -> IO ()
 def rclickG( x, y ): # :: Loc -> IO ()
     moveMouse( x, y )
     windll.user32.mouse_event( 8, 0, 0, 0, 0 ) # right down
-    sleep(0.2)
+    sleep(0.1)
     windll.user32.mouse_event( 16, 0, 0, 0, 0 ) # right up
-    sleep(0.2)
+    sleep(0.1)
 
 clickG = lclickG
 
@@ -237,7 +237,7 @@ def waitUntilTurnOrGameOver():
         if ( time()-t ) > 60*5: raise RuntimeError( 'Spent too long waiting for it to be our turn. Probably in bad state' )
         if getPixel( *LOC_LEAVE_BUTTON ) == COLOR_LEAVE_BUTTON: return 'game over'
         r = determineWhoseTurn()
-        if r == 'enemy turn': sleep( 3 )
+        if r == 'enemy turn': delay( 1 )
         else: return r
 
 def endTurn():
@@ -248,21 +248,19 @@ def endTurn():
     # if hero wasn't used, decline msg and try again
     click( *LOC_HERO_UNUSED_CONFIRM );  sleep( 1 )
     click( *LOC_TURN_END );             sleep( 1 )
-    sleep( 3 )
 
 def acceptHand():
     print 'Accepting hand'
-    click( *LOC_ACCEPT_HAND )
-    sleep( 3 )
+    click( *LOC_ACCEPT_HAND );          delay( 2 )
 
 def useHero( option ):
     '''Choose hero then activate option (1 indexed)'''
     print 'Using hero'
     click( *LOC_HERO )
-    delay( 4 )
+    delay( 1 )
     x, y = LOC_HERO_OPTION1
     click( x, y + HERO_OPTION_DELTA * ( option - 1 ) )
-    delay( 4 )
+    delay( 1 )
 
 def tryCardsInHand():
     '''Click cards left->right until placement msg appears, then try placing in every spot in random order'''
@@ -271,11 +269,10 @@ def tryCardsInHand():
     x1, _ = LOC_HAND_SCAN_END
 
     for x in xrange( x1, x0, -50 ):
-        click( x, y )
+        click( x, y );  sleep( 0.2 )
 
         # Spells/Fortunes with popup confirmations
-        sleep( 0.2 )
-        if nearlyColor( LOC_HAND_POPUP_CONFIRM, COLOR_HAND_POPUP_CONFIRM, 20 ):
+        if nearlyColor( LOC_HAND_POPUP_CONFIRM, COLOR_HAND_POPUP_CONFIRM, 20 ): #FIXME: colors dependant on hero
             print 'Accepting popup'
             click( *LOC_HAND_POPUP_CONFIRM )
             continue
@@ -339,7 +336,6 @@ def mainloop( turn=0 ):
         if turn <  3:   useHero( 1 ) # 4/2/2. +3 might > +1 magic > draw
         if turn == 3:   useHero( 2 )
         if turn >  3:   useHero( 4 )
-        useHero( 1 )    # just in case others failed or we miscounted
 
         tryCardsInHand()
         attackWithAllCreatures()
