@@ -20,7 +20,8 @@ def saveSrc( src ):
 def restart( src, p=None ):
     print 'Restarting'
     if p:
-        p.kill()
+        try: p.kill()
+        except: pass
     sleep( 5 )
     saveSrc( src )
     sleep( 2 )
