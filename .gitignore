@@ -1,5 +1,7 @@
 # Password files
 *.secret
+# the temp bot source files
+tmp.py
 
 #################
 ## Eclipse
