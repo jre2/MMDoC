@@ -2,7 +2,7 @@ from time import sleep
 import subprocess
 import urllib2
 
-PATH_SRC = r'C:\Users\Joseph\Documents\GitHub\MMDoC\tmp.py'
+PATH_SRC = 'tmp.py'
 URL_SRC = 'https://raw.github.com/jre2/MMDoC/master/bot.py'
 ACCOUNT_PASSWORD = open( 'password.secret' ).read()
 

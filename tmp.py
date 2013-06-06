@@ -1,27 +1,33 @@
-GMAIL_PASSWORD = 'Ru$h2112'
-GMAIL_USERNAME = 'overture2112'
-GMAIL_SUBJECT = 'MMDoC Bot'
-
+# Usage: python bot.py accountPassword [turnNo]
 ################################################################################
 ## Imports
 ################################################################################
 
-import win32com
-import win32com.client
+# core
 import os
 import sys
-import threading
+# utils
+from   math import sqrt
 import random
-from math import sqrt
-from time import sleep, time
-from ctypes import windll
+import re
+import threading
+from   time import sleep, time
+# ui
+from   ctypes import windll
+import win32com.client
+import win32gui
+# email
 import smtplib
-from email.MIMEText import MIMEText
-dc = windll.user32.GetDC( 0 ) # TODO: replace with exact dc
+from   email.MIMEText import MIMEText
+dc = windll.user32.GetDC( 0 )
 
 ################################################################################
 ## Reporting
 ################################################################################
+
+GMAIL_PASSWORD = 'potpiebot'
+GMAIL_USERNAME = 'overturebot'
+GMAIL_SUBJECT = 'MMDoC Bot - %s' % os.environ['COMPUTERNAME']
 
 def sendmail( body ): # :: Str -> IO ()
     addr = GMAIL_USERNAME + '@gmail.com'
@@ -69,7 +75,7 @@ def getPixel( x, y ): # :: Loc -> Color
 def getPixelM( x, y, fast=False ): # :: Loc -> Maybe Bool -> IO Color
     moveMouse( x, y, fast )
     return getPixel( x, y )
-    
+
 def followLine( x, y ): # :: Loc -> IO ()
     '''Trace a verticle line until color changes [not sure in what way]'''
     def _followLine( x, y, rate ): # accurate within rate
@@ -83,7 +89,77 @@ def followLine( x, y ): # :: Loc -> IO ()
     return (x,y)
 
 ################################################################################
-## Logic
+## New manipulation tools
+################################################################################
+
+def WindowTitle2Hwnd():
+    d = {}
+    def f( hwnd, *args ):
+        title = win32gui.GetWindowText( hwnd )
+        d[ title ] = hwnd
+    win32gui.EnumWindows( f, None )
+    return d
+
+def GetWindowChildren( phwnd ):
+    def callback( hwnd, hwnds ):
+        if win32gui.IsWindowVisible( hwnd ) and win32gui.IsWindowEnabled( hwnd ):
+            hwnds[ win32gui.GetClassName( hwnd ) ] = hwnd
+        return True
+
+    hwnds = {}
+    win32gui.EnumChildWindows( phwnd, callback, hwnds)
+    return hwnds
+
+def FindWindowRE( pat ):
+    d = {}
+    def f( hwnd, pat ):
+        title = win32gui.GetWindowText( hwnd )
+        if re.match( pat, title ):
+            d[ title ] = ( hwnd, GetWindowChildren( hwnd ) )
+    win32gui.EnumWindows( f, pat )
+    return d
+
+def clickWindow( hwnd, x, y, screen2client=True ):
+    if screen2client:
+        x, y = win32gui.ScreenToClient( hwnd, (x, y) )
+    lparam = y << 16 | x
+
+    win32gui.SendMessage( hwnd, win32con.WM_MOUSEMOVE, 0, lparam )
+    win32gui.SendMessage( hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam )
+    win32gui.SendMessage( hwnd, win32con.WM_LBUTTONUP, win32con.MK_LBUTTON, lparam )
+
+def click__( x, y ):
+    r = FindWindowRE( '.*Paint.*' )
+    hwnd = r.values()[0][1]['Afx:00000000FF830000:8']
+    clickWindow( hwnd, x, y )
+
+def example():
+    r = FindWindowRE( '.*Paint.*' )
+    print r
+    hwnd = r.values()[0][1]['Afx:00000000FF830000:8']
+    print hwnd
+    clickWindow( hwnd, 400, 500 )
+    lclick( 400, 500 )
+
+################################################################################
+## Bot Logic Utils
+################################################################################
+
+LAST_GAME_END_TIME = time()
+
+def dist3( a, b ):
+    return sqrt( ( a[0]-b[0] )**2 + ( a[1]-b[1] )**2 + ( a[2]-b[2] )**2 )
+
+def nearlyColor( loc, color, tolerance ):
+    return dist3( getPixel( *loc ), color ) <= tolerance
+
+def delay( sec ):
+    '''Wait for roughly given amount of time'''
+    t = min( 5, max( sec, random.gauss( sec, sec*0.5 ) ) )
+    sleep( t )
+
+################################################################################
+## Game Specific Logic
 ################################################################################
 
 COLOR_ACCEPT_HAND = (34, 61, 67)
@@ -91,11 +167,14 @@ COLOR_TURN_END = (198, 84, 16)
 COLOR_TURN_WAIT = (95, 95, 95)
 COLOR_CHOOSE_POSITION_CLOSE = (19, 8, 8)
 COLOR_LEAVE_BUTTON = (28, 54, 61)
+COLOR_HAND_POPUP_CONFIRM = (26, 47, 51)
 
 LOC_BOARD_SPACES_CENTERS = [ (779,279), (927, 298),
                              (772,433), (923,432),
                              (767,576), (921,580),
                              (754,739), (927,736) ]
+LOC_HAND_POPUP_CONFIRM = ( 647, 281 )
+LOC_HERO_UNUSED_CONFIRM = ( 642, 340 )
 LOC_CHOOSE_POSITION_CLOSE = (672, 198)
 LOC_HAND_SCAN_START = ( 10, 900 )
 LOC_HAND_SCAN_END = ( 700, 900 )
@@ -108,17 +187,13 @@ LOC_DAILY_REWARDS_EXTEND_BUTTON = ( 1188, 834 )
 LOC_HERO = ( 504, 479 )
 LOC_HERO_OPTION1 = ( 500, 280 )
 HERO_OPTION_DELTA = 60
-
-def dist3( a, b ):
-    return sqrt( ( a[0]-b[0] )**2 + ( a[1]-b[1] )**2 + ( a[2]-b[2] )**2 )
-
-def nearlyColor( loc, color, tolerance ):
-    return dist3( getPixel( *loc ), color ) <= tolerance
-
-def delay( sec ):
-    '''Wait for roughly given amount of time'''
-    t = min( 5, max( sec, random.gauss( sec, sec*0.5 ) ) )
-    sleep( t )
+LOC_ENEMY_HERO = ( 1658, 488 )
+LOC_ENEMY_BACK_LANE_X = 1393
+LOC_ENEMY_FRONT_LANE_X = 1220
+LOC_LAUNCER_PLAY_BTN = ( 1254, 771 )
+LOC_LOGIN_FOCUS = ( 994, 106 )
+LOC_LOGIN_PASSWORD = ( 876, 571 )
+LOC_LOGIN_BTN = ( 948, 691 )
 
 def queueForGame():
     '''Must be out of game at home screen'''
@@ -139,8 +214,7 @@ def waitForGame():
     '''Wait for mulligan buttons to appear'''
     t = time()
     while 1:
-        if ( time()-t ) > 60*5:
-            raise RuntimeError( 'queue taking too long, probably in bad state' )
+        if ( time()-t ) > 60*5: raise RuntimeError( 'Spent too long waiting for game. Probably in bad state' )
         if getPixel( *LOC_ACCEPT_HAND ) == COLOR_ACCEPT_HAND:
             return
         delay( 3 )
@@ -155,7 +229,9 @@ def determineWhoseTurn():
 
 def waitUntilTurnOrGameOver():
     print 'Waiting until my turn'
+    t = time()
     while 1:
+        if ( time()-t ) > 60*5: raise RuntimeError( 'Spent too long waiting for it to be our turn. Probably in bad state' )
         if getPixel( *LOC_LEAVE_BUTTON ) == COLOR_LEAVE_BUTTON: return 'game over'
         r = determineWhoseTurn()
         if r == 'enemy turn': sleep( 3 )
@@ -165,10 +241,10 @@ def endTurn():
     '''Try ending turn. If hero wasn't used somehow, decline msg and try again'''
     print 'Ending turn'
     # try end turn
-    click( *LOC_TURN_END ); sleep( 1 )
+    click( *LOC_TURN_END );             sleep( 1 )
     # if hero wasn't used, decline msg and try again
-    click( 642, 340 );      sleep( 1 )
-    click( *LOC_TURN_END ); sleep( 1 )
+    click( *LOC_HERO_UNUSED_CONFIRM );  sleep( 1 )
+    click( *LOC_TURN_END );             sleep( 1 )
     sleep( 3 )
 
 def acceptHand():
@@ -190,21 +266,20 @@ def tryCardsInHand():
     print 'Trying all cards in hand'
     x0, y = LOC_HAND_SCAN_START
     x1, _ = LOC_HAND_SCAN_END
-    
+
     for x in xrange( x1, x0, -50 ):
         click( x, y )
 
         # Spells/Fortunes with popup confirmations
         sleep( 0.2 )
-        if nearlyColor( (647, 281), (26, 47, 51), 20 ): #FIXME: const
+        if nearlyColor( LOC_HAND_POPUP_CONFIRM, COLOR_HAND_POPUP_CONFIRM, 20 ):
             print 'Accepting popup'
-            click( 647, 281 ) # accept if there's a popup
+            click( *LOC_HAND_POPUP_CONFIRM )
             continue
 
         # Creatures
         locs = LOC_BOARD_SPACES_CENTERS[:]
         random.shuffle( locs )
-        #locs.append( (647,281) ) # popup confirmation button
 
         while nearlyColor( LOC_CHOOSE_POSITION_CLOSE, COLOR_CHOOSE_POSITION_CLOSE, 10 ): # can place
             if not locs:
@@ -221,16 +296,16 @@ def attackWithAllCreatures():
     print 'Attacking'
     boardLocs = LOC_BOARD_SPACES_CENTERS[:]
     random.shuffle( boardLocs )
-    
+
     for x,y in boardLocs:
         # try activating creature
         click( x,y )
         # try clicking enemy hero, back lane, front lane
-        for dest in [ (1658,488), (1393,y), (1220,y) ]:
+        for dest in [ LOC_ENEMY_HERO, ( LOC_ENEMY_BACK_LANE_X, y ), ( LOC_ENEMY_FRONT_LANE_X, y ) ]:
             click( *dest )
 
 def mainloop( turn=0 ):
-    timing, t0 = {}, time()
+    timing, t0 = { 'me':{}, 'enemy':{} }, time()
 
     # Get in game
     if turn == 0:
@@ -239,36 +314,43 @@ def mainloop( turn=0 ):
     else:
         print 'Resuming game'
     timing['queue'] = time() - t0
-    
+
     # Play game
     acceptHand()
     while 1:
+        # Sanity check
+        if ( time()-t0 ) > 60*25 or turn > 20: raise RuntimeError( 'Game has gone on exceptionally long. Probably in bad state' )
+
         # Wait for turn
+        t_started_waiting = time()
         state = waitUntilTurnOrGameOver()
         if state == 'game over': break
-        t = time()
-        
+            # minor bookeeping
+        t_started_our_turn = time()
+        timing['enemy'][ turn ] = t_started_our_turn - t_started_waiting
+
         # Play turn
 
             # Use hero
         delay( 1 )
-        if turn <  3:   useHero( 1 ) # 4/2/2 then draw
+        if turn <  3:   useHero( 1 ) # 4/2/2. +3 might > +1 magic > draw
         if turn == 3:   useHero( 2 )
         if turn >  3:   useHero( 4 )
         useHero( 1 )    # just in case others failed or we miscounted
-        
+
         tryCardsInHand()
         attackWithAllCreatures()
         endTurn()
-        
+
         # book keeping
-        timing[ turn ] = time() - t
+        timing['me'][ turn ] = time() - t_started_our_turn
         turn += 1
-        #TODO: if time goes past X min, bail and restart
     acceptRewards()
-    
+
     # Reporting
     timing['total'] = time() - t0
+    global LAST_GAME_END_TIME
+    LAST_GAME_END_TIME = time()
     sendmail( 'Timing: %s' % timing )
 
 class Bot( threading.Thread ):
@@ -283,13 +365,13 @@ class Bot( threading.Thread ):
 
         needStart = True
         turn = 0
-        if len( sys.argv ) > 1:
+        if len( sys.argv ) > 2:
             needStart = False
-            turn = int( sys.argv[1] )
+            turn = int( sys.argv[2] )
 
         if needStart:
             restart()
-            
+
         while 1:
             try:
                 mainloop( turn )
@@ -299,35 +381,42 @@ class Bot( threading.Thread ):
 
 def restart():
     sendmail( 'Restarting' )
-    
+
     os.system('taskkill /F /IM Game.exe')
     #os.system('taskkill /F /IM Launcher.exe')
     sleep( 5 )
     #os.system(r'C:\Users\Joseph\AppData\Roaming\Ubisoft\MMDoC-PDCLive\Launcher.exe')
     #sleep( 10 )
-    
-    click( 1254, 771 ); sleep( 1 ) # play btn
-    click( 1254, 771 ); sleep( 1 ) # play btn
-    
+
+    # start game via launcher. sometimes takes 2 clicks but usually this just messes up focus
+    click( *LOC_LAUNCER_PLAY_BTN ); sleep( 1 )
+    click( *LOC_LAUNCER_PLAY_BTN ); sleep( 1 )
     sleep( 15 ) # wait for login screen
 
-    click( 994, 106 ) # get focus for mmdoc
-    click( 876, 571 ); sleep( 1 ) # password box
-    click( 876, 571 ); sleep( 1 ) # password box
+    # logic
+        # fix focus
+    click( *LOC_LOGIN_FOCUS ); sleep( 1 )
+        # select password box
+    click( *LOC_LOGIN_PASSWORD ); sleep( 1 )
+    click( *LOC_LOGIN_PASSWORD ); sleep( 1 ) #NOTE: probably not needed. verify this
+        # type password
     shell = win32com.client.Dispatch("WScript.Shell")
-    shell.SendKeys('cfavader17')
-    click( 948, 691 ); sleep( 1 ) # login btn
-    sleep( 20 ) # wait for login
-    #FIXME: verify at home screen, otherwise try again
+    shell.SendKeys( sys.argv[1] )
+        # click login
+    click( *LOC_LOGIN_BTN ); sleep( 1 )
+        # wait for slow load
+    sleep( 20 )
+
+    #TODO: verify at home screen, otherwise try again
 
 def main():
     b = Bot()
     b.start()
     while 1:
+        #TODO: check LAST_GAME_END_TIME and do full restart (game+bot thread)
         if windll.user32.GetAsyncKeyState( 0x76 ): # F7 key is pressed
             print 'KILL SWITCH caught'
             return
         sleep(1)
 
-print 'EXTRA PRINT HERE'
 main()
