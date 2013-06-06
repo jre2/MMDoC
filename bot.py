@@ -15,11 +15,11 @@ from   time import sleep, time
 # ui
 from   ctypes import windll
 import win32com.client
+import win32con
 import win32gui
 # email
 import smtplib
 from   email.MIMEText import MIMEText
-dc = windll.user32.GetDC( 0 )
 
 ################################################################################
 ## Reporting
@@ -47,36 +47,40 @@ def sendmail( body ): # :: Str -> IO ()
 ## Screen manipulation
 ################################################################################
 
-def moveMouse( x, y, fast=False ): # :: Loc -> Maybe Bool -> IO ()
+##### Basic global versions
+dc = windll.user32.GetDC( 0 )
+
+def moveMouseG( x, y, fast=False ): # :: Loc -> Maybe Bool -> IO ()
     windll.user32.SetCursorPos( x, y )
     if not fast:
         sleep(0.1)
 
-def lclick( x, y ): # :: Loc -> IO ()
+def lclickG( x, y ): # :: Loc -> IO ()
     moveMouse( x, y )
     windll.user32.mouse_event( 2, 0, 0, 0, 0 ) # left down
     sleep(0.1)
     windll.user32.mouse_event( 4, 0, 0, 0, 0 ) # left up
     sleep(0.1)
 
-def rclick( x, y ): # :: Loc -> IO ()
+def rclickG( x, y ): # :: Loc -> IO ()
     moveMouse( x, y )
     windll.user32.mouse_event( 8, 0, 0, 0, 0 ) # right down
     sleep(0.2)
     windll.user32.mouse_event( 16, 0, 0, 0, 0 ) # right up
     sleep(0.2)
 
-click = lclick
+clickG = lclickG
 
-def getPixel( x, y ): # :: Loc -> Color
+def getPixelG( x, y ): # :: Loc -> Color
     c = int( windll.gdi32.GetPixel( dc, x, y ) )
     return ( c & 0xff, ( c >> 8 ) & 0xff, ( c >> 16 ) & 0xff )
 
-def getPixelM( x, y, fast=False ): # :: Loc -> Maybe Bool -> IO Color
+def getPixelMG( x, y, fast=False ): # :: Loc -> Maybe Bool -> IO Color
+    '''As getPixel but also moves mouse over the location first'''
     moveMouse( x, y, fast )
     return getPixel( x, y )
 
-def followLine( x, y ): # :: Loc -> IO ()
+def followLineG( x, y ): # :: Loc -> IO ()
     '''Trace a verticle line until color changes [not sure in what way]'''
     def _followLine( x, y, rate ): # accurate within rate
         while abs( getPixelM( x, y, fast=True )[2] - 255 ) < 20:
@@ -88,26 +92,16 @@ def followLine( x, y ): # :: Loc -> IO ()
     x,y = _followLine( x, y-11, rate=1 )
     return (x,y)
 
-################################################################################
-## New manipulation tools
-################################################################################
-
-def WindowTitle2Hwnd():
-    d = {}
-    def f( hwnd, *args ):
-        title = win32gui.GetWindowText( hwnd )
-        d[ title ] = hwnd
-    win32gui.EnumWindows( f, None )
-    return d
+##### Advanced hwnd-specific versions
 
 def GetWindowChildren( phwnd ):
-    def callback( hwnd, hwnds ):
+    def f( hwnd, hwnds ):
         if win32gui.IsWindowVisible( hwnd ) and win32gui.IsWindowEnabled( hwnd ):
             hwnds[ win32gui.GetClassName( hwnd ) ] = hwnd
         return True
 
     hwnds = {}
-    win32gui.EnumChildWindows( phwnd, callback, hwnds)
+    win32gui.EnumChildWindows( phwnd, f, hwnds )
     return hwnds
 
 def FindWindowRE( pat ):
@@ -115,7 +109,9 @@ def FindWindowRE( pat ):
     def f( hwnd, pat ):
         title = win32gui.GetWindowText( hwnd )
         if re.match( pat, title ):
-            d[ title ] = ( hwnd, GetWindowChildren( hwnd ) )
+            try:                children = GetWindowChildren( hwnd )
+            except Exception:   children = {}
+            d[ title ] = ( hwnd, children )
     win32gui.EnumWindows( f, pat )
     return d
 
@@ -124,22 +120,29 @@ def clickWindow( hwnd, x, y, screen2client=True ):
         x, y = win32gui.ScreenToClient( hwnd, (x, y) )
     lparam = y << 16 | x
 
-    win32gui.SendMessage( hwnd, win32con.WM_MOUSEMOVE, 0, lparam )
+    win32gui.SendMessage( hwnd, win32con.WM_MOUSEMOVE,   0,                   lparam )
     win32gui.SendMessage( hwnd, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam )
-    win32gui.SendMessage( hwnd, win32con.WM_LBUTTONUP, win32con.MK_LBUTTON, lparam )
+    win32gui.SendMessage( hwnd, win32con.WM_LBUTTONUP,   win32con.MK_LBUTTON, lparam )
 
-def click__( x, y ):
-    r = FindWindowRE( '.*Paint.*' )
-    hwnd = r.values()[0][1]['Afx:00000000FF830000:8']
-    clickWindow( hwnd, x, y )
+def clickH( x, y ): clickWindow( HWND_GAME, x, y )
 
-def example():
-    r = FindWindowRE( '.*Paint.*' )
-    print r
-    hwnd = r.values()[0][1]['Afx:00000000FF830000:8']
-    print hwnd
-    clickWindow( hwnd, 400, 500 )
-    lclick( 400, 500 )
+def initScreenManipulation():
+    '''Initialize superior hwnd specific manipulators or fallback to basic global ones'''
+    global HWND_GAME, click, moveMouse, getPixel
+    try:
+        assert False #TODO disabled for now as it's not working
+        pat = '.*Might & Magic.*Duel of Champions.*RendezVous.*'
+        HWND_GAME = FindWindowRE( pat ).values()[0][0]
+        click = clickH
+        moveMouse = moveMouseG
+        getPixel = getPixelG
+        print 'Using advanced manipulation'
+    except Exception, e:
+        print 'Falling back to basic manipulation due to', e
+        HWND_GAME = None
+        click = clickG
+        moveMouse = moveMouseG
+        getPixel = getPixelG
 
 ################################################################################
 ## Bot Logic Utils
@@ -183,7 +186,7 @@ LOC_PLAY_BUTTON = ( 948, 190 )
 LOC_TURN_END = LOC_TURN_COLOR = ( 921, 73 )
 LOC_QUEUE_BUTTON = ( 1361, 759 )
 LOC_LEAVE_BUTTON = ( 1488, 721 )
-LOC_DAILY_REWARDS_EXTEND_BUTTON = ( 1188, 834 )
+LOC_DAILY_REWARDS_EXTEND_BUTTON = ( 1165, 744 )
 LOC_HERO = ( 504, 479 )
 LOC_HERO_OPTION1 = ( 500, 280 )
 HERO_OPTION_DELTA = 60
@@ -361,7 +364,7 @@ class Bot( threading.Thread ):
     def run( self ):
         print 'Starting bot'
         import pythoncom
-        pythoncom.CoInitialize()
+        pythoncom.CoInitialize()    # must do this manually for non-main threads
 
         needStart = True
         turn = 0
@@ -388,6 +391,7 @@ def restart():
     #os.system(r'C:\Users\Joseph\AppData\Roaming\Ubisoft\MMDoC-PDCLive\Launcher.exe')
     #sleep( 10 )
 
+    initScreenManipulation()
     # start game via launcher. sometimes takes 2 clicks but usually this just messes up focus
     click( *LOC_LAUNCER_PLAY_BTN ); sleep( 1 )
     click( *LOC_LAUNCER_PLAY_BTN ); sleep( 1 )
@@ -407,9 +411,12 @@ def restart():
         # wait for slow load
     sleep( 20 )
 
+    initScreenManipulation()
+
     #TODO: verify at home screen, otherwise try again
 
 def main():
+    initScreenManipulation()
     b = Bot()
     b.start()
     while 1:
